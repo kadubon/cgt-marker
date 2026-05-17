@@ -1,0 +1,119 @@
+{
+  "condition_count": 2,
+  "condition_summary": {
+    "baseline": {
+      "asserts_visible_conflict": 0.0,
+      "false_conflict_on_control": 0.0,
+      "marker_success": 0.0,
+      "mentions_both_values": 0.0,
+      "mentions_conflict": 0.0,
+      "mentions_conflict_term": 0.5,
+      "mentions_sources": 0.0,
+      "recommends_review": 0.5
+    },
+    "marker_aware": {
+      "asserts_visible_conflict": 1.0,
+      "false_conflict_on_control": 0.0,
+      "marker_success": 1.0,
+      "mentions_both_values": 1.0,
+      "mentions_conflict": 1.0,
+      "mentions_conflict_term": 1.0,
+      "mentions_sources": 1.0,
+      "recommends_review": 1.0
+    }
+  },
+  "conditions": [
+    "baseline",
+    "marker_aware"
+  ],
+  "conflict_record_count": 4,
+  "control_record_count": 0,
+  "experiment_name": "marker_context_effect",
+  "limitations": [
+    "This is a lightweight proxy evaluation, not a benchmark.",
+    "String-matching scores can miss semantically correct answers and can count wording artifacts.",
+    "The result evaluates rendered marker context under fixed scenarios, not CGT as a whole.",
+    "This run contains no control records, so false_conflict_on_control is reported but not empirically evaluated here.",
+    "Raw prompts and responses are intentionally excluded from this public summary."
+  ],
+  "metrics": [
+    "mentions_conflict",
+    "mentions_conflict_term",
+    "asserts_visible_conflict",
+    "mentions_both_values",
+    "mentions_sources",
+    "recommends_review",
+    "false_conflict_on_control",
+    "marker_success"
+  ],
+  "model": "gemma4:e4b",
+  "options": {
+    "num_predict": 256,
+    "seed": 7,
+    "temperature": 0
+  },
+  "primary_outcome": "marker_success = conflict scenario AND asserts_visible_conflict AND mentions_both_values AND mentions_sources",
+  "record_count": 4,
+  "scenario_condition_summary": [
+    {
+      "asserts_visible_conflict": 0.0,
+      "condition": "baseline",
+      "false_conflict_on_control": 0.0,
+      "marker_success": 0.0,
+      "mentions_both_values": 0.0,
+      "mentions_conflict": 0.0,
+      "mentions_conflict_term": 1.0,
+      "mentions_sources": 0.0,
+      "n": 1,
+      "recommends_review": 1.0,
+      "scenario_id": "deadline_date_conflict"
+    },
+    {
+      "asserts_visible_conflict": 1.0,
+      "condition": "marker_aware",
+      "false_conflict_on_control": 0.0,
+      "marker_success": 1.0,
+      "mentions_both_values": 1.0,
+      "mentions_conflict": 1.0,
+      "mentions_conflict_term": 1.0,
+      "mentions_sources": 1.0,
+      "n": 1,
+      "recommends_review": 1.0,
+      "scenario_id": "deadline_date_conflict"
+    },
+    {
+      "asserts_visible_conflict": 0.0,
+      "condition": "baseline",
+      "false_conflict_on_control": 0.0,
+      "marker_success": 0.0,
+      "mentions_both_values": 0.0,
+      "mentions_conflict": 0.0,
+      "mentions_conflict_term": 0.0,
+      "mentions_sources": 0.0,
+      "n": 1,
+      "recommends_review": 0.0,
+      "scenario_id": "release_status_conflict"
+    },
+    {
+      "asserts_visible_conflict": 1.0,
+      "condition": "marker_aware",
+      "false_conflict_on_control": 0.0,
+      "marker_success": 1.0,
+      "mentions_both_values": 1.0,
+      "mentions_conflict": 1.0,
+      "mentions_conflict_term": 1.0,
+      "mentions_sources": 1.0,
+      "n": 1,
+      "recommends_review": 1.0,
+      "scenario_id": "release_status_conflict"
+    }
+  ],
+  "scenario_count": 2,
+  "scenario_version": "1.0.0",
+  "scoring_version": "1.1.0",
+  "think": false,
+  "timestamp_end": "2026-05-17T10:26:44.037555+00:00",
+  "timestamp_start": "2026-05-17T10:26:17.887929+00:00",
+  "trial_count": 1,
+  "unknown_expected_record_count": 0
+}

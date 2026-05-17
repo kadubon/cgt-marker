@@ -1,0 +1,130 @@
+[
+  {
+    "id": "deadline_date_conflict",
+    "title": "Deadline date conflict",
+    "report": "The project deadline is currently listed as 2026-06-01.",
+    "claims": [
+      {
+        "subject": "project.deadline",
+        "predicate": "equals",
+        "value": "2026-06-01",
+        "source": "email",
+        "metadata": {
+          "quote": "The deadline is June 1.",
+          "uri": "mail://deadline"
+        }
+      },
+      {
+        "subject": "project.deadline",
+        "predicate": "equals",
+        "value": "2026-06-03",
+        "source": "calendar",
+        "metadata": {
+          "quote": "The deadline is June 3.",
+          "uri": "calendar://deadline"
+        }
+      }
+    ],
+    "expected": {
+      "has_conflict": true,
+      "values": ["2026-06-01", "2026-06-03"],
+      "sources": ["email", "calendar"]
+    }
+  },
+  {
+    "id": "release_status_conflict",
+    "title": "Release status conflict",
+    "report": "The release status is summarized as approved.",
+    "claims": [
+      {
+        "subject": "release.status",
+        "predicate": "status",
+        "value": "approved",
+        "source": "review-system"
+      },
+      {
+        "subject": "release.status",
+        "predicate": "status",
+        "value": "rejected",
+        "source": "qa-system"
+      }
+    ],
+    "expected": {
+      "has_conflict": true,
+      "values": ["approved", "rejected"],
+      "sources": ["review-system", "qa-system"]
+    }
+  },
+  {
+    "id": "budget_interval_conflict",
+    "title": "Budget interval conflict",
+    "report": "The budget summary says the budget is at most 100.",
+    "claims": [
+      {
+        "subject": "budget",
+        "predicate": "lte",
+        "value": 100,
+        "source": "finance-a"
+      },
+      {
+        "subject": "budget",
+        "predicate": "gte",
+        "value": 200,
+        "source": "finance-b"
+      }
+    ],
+    "expected": {
+      "has_conflict": true,
+      "values": ["100", "200"],
+      "sources": ["finance-a", "finance-b"]
+    }
+  },
+  {
+    "id": "meeting_date_conflict",
+    "title": "Meeting date conflict",
+    "report": "The meeting date is shown as 2026-07-10.",
+    "claims": [
+      {
+        "subject": "meeting.date",
+        "predicate": "date",
+        "value": "2026-07-10",
+        "source": "chat"
+      },
+      {
+        "subject": "meeting.date",
+        "predicate": "date",
+        "value": "2026-07-11",
+        "source": "calendar"
+      }
+    ],
+    "expected": {
+      "has_conflict": true,
+      "values": ["2026-07-10", "2026-07-11"],
+      "sources": ["chat", "calendar"]
+    }
+  },
+  {
+    "id": "non_conflict_control",
+    "title": "Non-conflict control",
+    "report": "The meeting room is Room A and the meeting status is active.",
+    "claims": [
+      {
+        "subject": "meeting.room",
+        "predicate": "equals",
+        "value": "Room A",
+        "source": "calendar"
+      },
+      {
+        "subject": "meeting.status",
+        "predicate": "status",
+        "value": "active",
+        "source": "calendar"
+      }
+    ],
+    "expected": {
+      "has_conflict": false,
+      "values": [],
+      "sources": ["calendar"]
+    }
+  }
+]
