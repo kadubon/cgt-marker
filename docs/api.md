@@ -22,6 +22,9 @@ Utilities:
 - `UUIDGenerator`
 - `FrozenClock`
 - `SystemClock`
+- `ValidationIssue`
+- `is_json_value`
+- `validate_claim`
 
 Default detectors:
 
@@ -41,6 +44,10 @@ Adapter helpers:
 
 - `add_claims_to_state`
 - `render_marker_context_from_state`
+
+Both adapter helpers accept an optional `ledger_factory` for callers that need
+custom detectors, policies, clocks, or ID generators while still storing framework
+state as plain dictionaries.
 
 ## Supported Policies
 

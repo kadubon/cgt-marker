@@ -10,11 +10,15 @@
   `Claim` objects.
 - It does not automatically resolve, delete, or merge contradictory claims.
 - It does not enforce global consistency.
-- Temporal detection expects normalized ISO date or datetime strings.
+- Temporal detection expects normalized ISO date or datetime strings. Date-only
+  strings compare only with date-only strings, datetime strings compare only with
+  datetime strings, and timezone-aware datetimes are normalized to UTC. Natural
+  language parsing is out of scope.
 - Numeric interval detection supports a small predicate set: `lt`, `lte`, `gt`,
   `gte`, and `equals`.
-- JSONL storage is a simple append/replay log. It is not a concurrent database and
-  does not provide transactions.
+- JSONL storage is a simple append/replay log. Marker updates append a new marker
+  record with the same id and replay keeps the latest marker by id. It is not a
+  concurrent database and does not provide transactions.
 - Framework adapters are optional helpers, not core dependencies.
 - Reserved policy modes are future work and raise on conflict finalization.
 - The Ollama experiment is a lightweight proxy evaluation under fixed scenarios and

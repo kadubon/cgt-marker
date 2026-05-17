@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cgt-marker"
-version = "0.1.0"
+version = "0.1.1"
 description = "Contradiction markers for long-running AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,9 +21,17 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries :: Python Modules",
   "Typing :: Typed",
 ]
 dependencies = []
+
+[project.urls]
+Homepage = "https://doi.org/10.5281/zenodo.20254492"
+Repository = "https://github.com/kadubon/cgt-marker"
+Issues = "https://github.com/kadubon/cgt-marker/issues"
+DOI = "https://doi.org/10.5281/zenodo.20254492"
 
 [dependency-groups]
 dev = [

@@ -8,6 +8,7 @@ from cgt_marker.core.policy import MarkerPolicy, PolicyResult
 from cgt_marker.core.store import ClaimStore, LedgerStore, MarkerStore
 from cgt_marker.core.time import Clock, FrozenClock, SystemClock
 from cgt_marker.core.types import JSONDict, JSONValue
+from cgt_marker.core.validation import ValidationIssue, is_json_value, validate_claim
 
 __all__ = [
     "Claim",
@@ -31,4 +32,7 @@ __all__ = [
     "PolicyResult",
     "SystemClock",
     "UUIDGenerator",
+    "ValidationIssue",
+    "is_json_value",
+    "validate_claim",
 ]

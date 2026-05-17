@@ -13,7 +13,7 @@ from typing import Any, cast
 from cgt_marker import Claim, CounterIdGenerator, FrozenClock, MarkerLedger
 
 EXPERIMENT_NAME = "marker_context_effect"
-SCENARIO_VERSION = "1.0.0"
+SCENARIO_VERSION = "1.1.0"
 DEFAULT_MODEL = "gemma4:e4b"
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 DEFAULT_OPTIONS: dict[str, int | float] = {
@@ -141,6 +141,7 @@ def run_records(
     think: bool,
     trials: int,
     dry_run: bool,
+    include_raw: bool,
     timeout: int,
 ) -> list[dict[str, Any]]:
     """Generate prompts, optionally call Ollama, and return JSONL-ready records."""
@@ -170,29 +171,39 @@ def run_records(
                         think=think,
                         timeout=timeout,
                     )
-                records.append(
-                    {
-                        "timestamp": datetime.now(UTC).isoformat(),
-                        "experiment_name": EXPERIMENT_NAME,
-                        "scenario_version": SCENARIO_VERSION,
-                        "conditions": list(CONDITIONS),
-                        "scoring_version": SCORING_VERSION,
-                        "scenario_id": scenario["id"],
-                        "expected_has_conflict": expected_has_conflict,
-                        "condition": condition,
-                        "trial": trial,
-                        "model": model,
-                        "options": dict(options),
-                        "think": think,
-                        "dry_run": dry_run,
-                        "report": prompt_record["report"],
-                        "marker_context": prompt_record["marker_context"],
-                        "ledger_state": prompt_record["ledger_state"],
-                        "prompt": prompt_record["prompt"],
-                        "response": response,
-                        "scores": score_response(response, expected),
-                    }
-                )
+                prompt = str(prompt_record["prompt"])
+                record = {
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "experiment_name": EXPERIMENT_NAME,
+                    "scenario_version": SCENARIO_VERSION,
+                    "conditions": list(CONDITIONS),
+                    "scoring_version": SCORING_VERSION,
+                    "scenario_id": scenario["id"],
+                    "scenario_type": scenario.get("scenario_type"),
+                    "expected_has_conflict": expected_has_conflict,
+                    "condition": condition,
+                    "trial": trial,
+                    "model": model,
+                    "options": dict(options),
+                    "think": think,
+                    "dry_run": dry_run,
+                    "include_raw": include_raw,
+                    "prompt_hash": hash_text(prompt),
+                    "response_hash": hash_text(response),
+                    "response_length": len(response),
+                    "scores": score_response(response, expected),
+                }
+                if include_raw:
+                    record.update(
+                        {
+                            "report": prompt_record["report"],
+                            "marker_context": prompt_record["marker_context"],
+                            "ledger_state": prompt_record["ledger_state"],
+                            "prompt": prompt,
+                            "raw_response": response,
+                        }
+                    )
+                records.append(record)
     return records
 
 
@@ -212,6 +223,12 @@ def write_manifest(manifest: Mapping[str, Any], path: Path) -> None:
     path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def hash_text(value: str) -> str:
+    """Return a stable SHA-256 hex digest for prompt/response tracking."""
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def build_manifest(args: argparse.Namespace, raw_argv: Sequence[str]) -> dict[str, Any]:
     """Build reproducibility metadata without depending on external CLI tools."""
 
@@ -226,6 +243,7 @@ def build_manifest(args: argparse.Namespace, raw_argv: Sequence[str]) -> dict[st
         "think": DEFAULT_THINK,
         "timeout": args.timeout,
         "dry_run": args.dry_run,
+        "include_raw": args.include_raw,
         "limit": args.limit,
         "trials": args.trials,
         "conditions": list(CONDITIONS),
@@ -277,6 +295,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--trials", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--include-raw", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -294,6 +313,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         think=DEFAULT_THINK,
         trials=args.trials,
         dry_run=args.dry_run,
+        include_raw=args.include_raw,
         timeout=args.timeout,
     )
     write_jsonl(records, args.output)

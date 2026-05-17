@@ -21,6 +21,10 @@ Optional fields:
 - `scope`: caller-defined JSON-compatible context.
 - `metadata`: extra context such as `quote` and `uri`.
 
+Claim construction stays lightweight. Callers that want explicit checks can use
+`validate_claim`, which returns non-throwing `ValidationIssue` records for empty
+required fields, invalid confidence, or non-JSON-compatible values.
+
 ## EvidenceRef
 
 `EvidenceRef` is a lightweight pointer copied into markers. The default detectors

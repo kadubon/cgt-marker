@@ -13,15 +13,28 @@ REQUIRED_CLAIM_KEYS = {"subject", "predicate", "value", "source"}
 
 def test_scenarios_json_is_valid_and_has_required_fields() -> None:
     scenarios = run_experiment.load_scenarios()
-    assert len(scenarios) == 5
+    assert len(scenarios) == 8
+    scenario_types = {scenario["scenario_type"] for scenario in scenarios}
+    assert scenario_types >= {
+        "conflicting_date",
+        "conflicting_status",
+        "numeric_interval",
+        "source_conflict",
+        "stale_vs_newer",
+        "policy_conflict",
+        "ambiguous_conflict",
+        "control",
+    }
     for scenario in scenarios:
         assert set(scenario) >= REQUIRED_SCENARIO_KEYS
+        assert "scenario_type" in scenario
         assert isinstance(scenario["claims"], list)
         assert scenario["claims"]
         for claim in scenario["claims"]:
             assert set(claim) >= REQUIRED_CLAIM_KEYS
         expected = scenario["expected"]
         assert isinstance(expected["has_conflict"], bool)
+        assert isinstance(expected["requires_clarification"], bool)
         assert isinstance(expected["values"], list)
         assert isinstance(expected["sources"], list)
 
@@ -62,18 +75,46 @@ def test_dry_run_cli_generates_jsonl_without_ollama(tmp_path: Path) -> None:
     assert {record["condition"] for record in records} == {"baseline", "marker_aware"}
     assert all(record["dry_run"] is True for record in records)
     assert all(record["think"] is False for record in records)
-    assert all(record["response"] == "" for record in records)
     for record in records:
         assert record["experiment_name"] == run_experiment.EXPERIMENT_NAME
         assert record["scenario_version"] == run_experiment.SCENARIO_VERSION
         assert record["conditions"] == list(run_experiment.CONDITIONS)
         assert record["expected_has_conflict"] is True
+        assert record["prompt_hash"]
+        assert record["response_hash"] == run_experiment.hash_text("")
+        assert record["response_length"] == 0
+        assert "prompt" not in record
+        assert "response" not in record
+        assert "raw_response" not in record
         assert "scoring_version" in record
 
     manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
     assert manifest_data["model"] == run_experiment.DEFAULT_MODEL
     assert manifest_data["scenario_sha256"]
     assert manifest_data["output"] == str(output)
+    assert manifest_data["include_raw"] is False
+
+
+def test_dry_run_cli_can_include_raw_prompt_and_response(tmp_path: Path) -> None:
+    output = tmp_path / "dry-run-raw.jsonl"
+    manifest = tmp_path / "dry-run-raw.manifest.json"
+    run_experiment.main(
+        [
+            "--dry-run",
+            "--include-raw",
+            "--limit",
+            "1",
+            "--output",
+            str(output),
+            "--manifest-output",
+            str(manifest),
+        ]
+    )
+    records = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+    assert all("prompt" in record for record in records)
+    assert all("raw_response" in record for record in records)
+    assert all("response" not in record for record in records)
+    assert json.loads(manifest.read_text(encoding="utf-8"))["include_raw"] is True
 
 
 def test_scoring_function_handles_conflict_and_control_outputs() -> None:
@@ -97,14 +138,18 @@ def test_scoring_function_handles_conflict_and_control_outputs() -> None:
     assert conflict_scores["recommends_review"]
     assert not conflict_scores["false_conflict_on_control"]
     assert conflict_scores["marker_success"]
+    assert conflict_scores["avoids_silent_overwrite"]
+    assert conflict_scores["primary_success"]
 
     control_expected = {"has_conflict": False, "values": [], "sources": ["calendar"]}
     control_scores = score_response("Proceed with Room A.", control_expected)
     assert not control_scores["mentions_conflict"]
     assert not control_scores["false_conflict_on_control"]
+    assert control_scores["primary_success"]
 
     false_conflict_scores = score_response("There is a conflict to review.", control_expected)
     assert false_conflict_scores["false_conflict_on_control"]
+    assert not false_conflict_scores["primary_success"]
 
     negated_scores = score_response(
         "No conflicting values are visible in the provided report.", conflict_expected
@@ -113,6 +158,37 @@ def test_scoring_function_handles_conflict_and_control_outputs() -> None:
     assert not negated_scores["asserts_visible_conflict"]
     assert not negated_scores["mentions_conflict"]
     assert not negated_scores["marker_success"]
+
+    unresolved_negated_scores = score_response(
+        "No unresolved contradictions are visible in the provided context.",
+        conflict_expected,
+    )
+    assert unresolved_negated_scores["mentions_conflict_term"]
+    assert not unresolved_negated_scores["asserts_visible_conflict"]
+
+    clarification_expected = {
+        "has_conflict": True,
+        "requires_clarification": True,
+        "values": ["team-alpha", "team-beta"],
+        "sources": ["planning-doc", "handoff-note"],
+    }
+    clarification_scores = score_response(
+        (
+            "There is an unresolved conflict: planning-doc says team-alpha and "
+            "handoff-note says team-beta. Ask for clarification before proceeding."
+        ),
+        clarification_expected,
+    )
+    assert clarification_scores["asks_for_clarification_when_needed"]
+    assert clarification_scores["preserves_unresolved_status"]
+    assert clarification_scores["primary_success"]
+
+    overwrite_scores = score_response(
+        "Use only team-alpha and treat it as final.",
+        clarification_expected,
+    )
+    assert not overwrite_scores["avoids_silent_overwrite"]
+    assert not overwrite_scores["primary_success"]
 
 
 def test_report_generator_writes_public_summary_without_raw_text(tmp_path: Path) -> None:
@@ -157,7 +233,7 @@ def test_report_generator_writes_public_summary_without_raw_text(tmp_path: Path)
     assert summary["conflict_record_count"] == 2
     assert summary["control_record_count"] == 0
     assert summary["unknown_expected_record_count"] == 0
-    assert summary["primary_outcome"].startswith("marker_success")
+    assert summary["primary_outcome"].startswith("primary_success")
     assert "no control records" in " ".join(summary["limitations"])
 
 
@@ -178,6 +254,7 @@ def test_docs_explain_raw_data_policy_and_results_ignore() -> None:
     assert "experiments/results/" in experiment_readme
     assert "experiments/reports/" in experiment_readme
     assert "marker_success" in experiment_readme
+    assert "primary_success" in experiment_readme
     assert "control records" in experiment_readme
 
     limitations = (ROOT / "docs" / "limitations.md").read_text(encoding="utf-8")

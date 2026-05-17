@@ -10,12 +10,18 @@ import pytest
 from cgt_marker import (
     Claim,
     CounterIdGenerator,
+    EvidenceRef,
+    ExactSlotConflictDetector,
     FrozenClock,
     Marker,
+    MarkerDraft,
     MarkerKind,
     MarkerLedger,
     MarkerPolicy,
     MarkerStatus,
+    ValidationIssue,
+    is_json_value,
+    validate_claim,
 )
 from cgt_marker.adapters.langgraph import add_claims_to_state, render_marker_context_from_state
 from cgt_marker.storage import JsonlStore
@@ -68,7 +74,7 @@ def test_status_conflicts_are_detected() -> None:
     state.add_claim(Claim("task", "status", "done", "tracker"))
     state.add_claim(Claim("task", "status", "not_done", "chat"))
     assert len(state.open_markers()) == 1
-    assert state.open_markers()[0].dimensions == ("status",)
+    assert set(state.open_markers()[0].dimensions) == {"status", "value"}
 
 
 def test_temporal_conflicts_are_detected_for_normalized_dates() -> None:
@@ -179,6 +185,24 @@ def test_jsonl_store_save_load(tmp_path) -> None:  # type: ignore[no-untyped-def
     assert len(store.list_markers()) == 1
 
 
+def test_jsonl_store_replay_keeps_latest_marker_status(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    path = tmp_path / "ledger.jsonl"
+    store = JsonlStore(path)
+    state = MarkerLedger.default(
+        store=store,
+        id_generator=CounterIdGenerator(),
+        clock=FrozenClock(datetime(2026, 1, 1, tzinfo=UTC)),
+    )
+    state.add_claim(Claim("deadline", "equals", "2026-06-01", "email"))
+    state.add_claim(Claim("deadline", "equals", "2026-06-03", "ticket"))
+    marker_id = state.open_markers()[0].id
+    state.resolve_marker(marker_id)
+
+    reloaded = JsonlStore(path)
+    assert reloaded.list_markers()[0].id == marker_id
+    assert reloaded.list_markers()[0].status is MarkerStatus.RESOLVED
+
+
 def test_prompt_renderer_includes_unresolved_markers() -> None:
     state = ledger()
     state.add_claim(Claim("deadline", "equals", "2026-06-01", "email"))
@@ -206,6 +230,27 @@ def test_dict_state_helper_adds_claims_and_preserves_markers() -> None:
     assert len(state["cgt_marker"]["claims"]) == 2  # type: ignore[index]
     assert len(state["cgt_marker"]["markers"]) == 1  # type: ignore[index]
     assert "release.status" in render_marker_context_from_state(state)
+
+
+def test_dict_state_helper_accepts_custom_ledger_factory() -> None:
+    def factory(serialized: dict[str, object]) -> MarkerLedger:
+        custom = MarkerLedger(
+            detectors=[ExactSlotConflictDetector(predicates=frozenset({"equals"}))],
+            policy=MarkerPolicy.REQUIRE_REVIEW,
+            id_generator=CounterIdGenerator(),
+            clock=FrozenClock(datetime(2026, 1, 1, tzinfo=UTC)),
+        )
+        custom.import_state(serialized)
+        return custom
+
+    state = add_claims_to_state(
+        {},
+        [Claim("x", "equals", "a", "left"), Claim("x", "equals", "b", "right")],
+        ledger_factory=factory,
+    )
+    marker = state["cgt_marker"]["markers"][0]  # type: ignore[index]
+    assert marker["metadata"]["requires_review"] is True
+    assert "x equals" in render_marker_context_from_state(state, ledger_factory=factory)
 
 
 def test_cgt_principle_contradiction_is_not_failure() -> None:
@@ -282,6 +327,9 @@ def test_public_package_exports_stable_mvp_surface() -> None:
         "JsonlStore",
         "MarkdownRenderer",
         "PromptContextRenderer",
+        "ValidationIssue",
+        "is_json_value",
+        "validate_claim",
     ):
         assert name in module.__all__
 
@@ -324,3 +372,113 @@ def test_marker_evidence_preserves_source_quote_and_uri() -> None:
     assert marker.evidence[1].quote == "The deadline is June 3."
     assert marker.evidence[1].uri == "ticket://issue/456"
     assert "sources: email, ticket" in state.render_marker_context()
+
+
+class _DimensionDetector:
+    def __init__(self, name: str, dimension: str, severity: float, confidence: float) -> None:
+        self.name = name
+        self.dimension = dimension
+        self.severity = severity
+        self.confidence = confidence
+
+    def detect(self, new_claim: Claim, existing_claims: list[Claim]) -> list[MarkerDraft]:
+        drafts: list[MarkerDraft] = []
+        for existing in existing_claims:
+            if existing.subject == new_claim.subject and existing.value != new_claim.value:
+                drafts.append(
+                    MarkerDraft(
+                        subject=new_claim.subject,
+                        predicate=new_claim.predicate,
+                        claim_ids=(existing.id, new_claim.id),
+                        evidence=(
+                            EvidenceRef(source=existing.source, claim_id=existing.id),
+                            EvidenceRef(source=new_claim.source, claim_id=new_claim.id),
+                        ),
+                        dimensions=(self.dimension,),
+                        severity=self.severity,
+                        confidence=self.confidence,
+                        message="first detector message",
+                        metadata={"detector": self.name},
+                    )
+                )
+        return drafts
+
+
+def test_duplicate_marker_drafts_merge_dimensions_evidence_and_detector_metadata() -> None:
+    state = MarkerLedger(
+        detectors=[
+            _DimensionDetector("alpha", "alpha_dimension", 0.4, 0.9),
+            _DimensionDetector("beta", "beta_dimension", 0.8, 0.6),
+        ],
+        id_generator=CounterIdGenerator(),
+        clock=FrozenClock(datetime(2026, 1, 1, tzinfo=UTC)),
+    )
+    state.add_claim(Claim("x", "equals", "a", "left"))
+    result = state.add_claim(Claim("x", "equals", "b", "right"))
+
+    assert len(result.markers) == 1
+    marker = result.markers[0]
+    assert marker.status is MarkerStatus.OPEN
+    assert marker.dimensions == ("alpha_dimension", "beta_dimension")
+    assert marker.severity == 0.8
+    assert marker.confidence == 0.6
+    assert marker.metadata["detectors"] == ["alpha", "beta"]
+    assert len(marker.evidence) == 2
+    assert len(state.list_claims()) == 2
+
+
+def test_claim_validation_utilities() -> None:
+    valid = Claim("subject", "equals", {"value": [1, "a"]}, "source", confidence=0.5)
+    assert validate_claim(valid) == []
+    assert is_json_value(valid.value)
+
+    invalid = Claim("", "", object(), "", confidence=1.5)
+    issues = validate_claim(invalid)
+    assert ValidationIssue("subject", "required", "subject must be a non-empty string") in issues
+    assert {issue.field for issue in issues} >= {
+        "subject",
+        "predicate",
+        "source",
+        "confidence",
+        "value",
+    }
+
+
+def test_claim_validation_detects_non_json_scope_and_metadata() -> None:
+    claim = Claim(
+        "subject",
+        "equals",
+        "value",
+        "source",
+        scope={"bad": object()},  # type: ignore[dict-item]
+        metadata={1: "not a string key"},  # type: ignore[dict-item]
+    )
+    issues = validate_claim(claim)
+    assert {issue.field for issue in issues} == {"scope", "metadata"}
+
+
+def test_temporal_detector_precision_and_timezone_policy() -> None:
+    same_date = ledger()
+    same_date.add_claim(Claim("deadline", "date", "2026-06-01", "a"))
+    same_date.add_claim(Claim("deadline", "date", "2026-06-01", "b"))
+    assert same_date.open_markers() == []
+
+    different_date = ledger()
+    different_date.add_claim(Claim("deadline", "date", "2026-06-01", "a"))
+    different_date.add_claim(Claim("deadline", "date", "2026-06-02", "b"))
+    assert len(different_date.open_markers()) == 1
+
+    precision_mismatch = ledger()
+    precision_mismatch.add_claim(Claim("deadline", "date", "2026-06-01", "a"))
+    precision_mismatch.add_claim(Claim("deadline", "date", "2026-06-01T00:00:00", "b"))
+    assert precision_mismatch.open_markers() == []
+
+    same_instant = ledger()
+    same_instant.add_claim(Claim("handoff", "date", "2026-06-01T12:00:00+09:00", "tokyo"))
+    same_instant.add_claim(Claim("handoff", "date", "2026-06-01T03:00:00+00:00", "utc"))
+    assert same_instant.open_markers() == []
+
+    different_instant = ledger()
+    different_instant.add_claim(Claim("handoff", "date", "2026-06-01T12:00:00+09:00", "tokyo"))
+    different_instant.add_claim(Claim("handoff", "date", "2026-06-01T04:00:00+00:00", "utc"))
+    assert len(different_instant.open_markers()) == 1

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -7,6 +8,7 @@ from typing import Any
 
 from cgt_marker.core.claim import Claim
 from cgt_marker.core.detector import ConflictDetector
+from cgt_marker.core.evidence import EvidenceRef
 from cgt_marker.core.ids import IdGenerator, UUIDGenerator
 from cgt_marker.core.marker import Marker, MarkerDraft, MarkerStatus
 from cgt_marker.core.policy import MarkerPolicy, PolicyResult
@@ -224,8 +226,7 @@ class MarkerLedger:
 
     @staticmethod
     def _dedupe_drafts(drafts: Iterable[MarkerDraft]) -> list[MarkerDraft]:
-        seen: set[tuple[object, ...]] = set()
-        deduped: list[MarkerDraft] = []
+        merged: dict[tuple[object, ...], MarkerDraft] = {}
         for draft in drafts:
             key = (
                 draft.kind,
@@ -233,8 +234,104 @@ class MarkerLedger:
                 draft.predicate,
                 frozenset(draft.claim_ids),
             )
+            if key not in merged:
+                merged[key] = draft
+                continue
+            merged[key] = MarkerLedger._merge_drafts(merged[key], draft)
+        return list(merged.values())
+
+    @staticmethod
+    def _merge_drafts(left: MarkerDraft, right: MarkerDraft) -> MarkerDraft:
+        return replace(
+            left,
+            evidence=MarkerLedger._merge_evidence(left.evidence, right.evidence),
+            dimensions=MarkerLedger._ordered_union(left.dimensions, right.dimensions),
+            severity=MarkerLedger._max_optional(left.severity, right.severity),
+            confidence=MarkerLedger._min_optional(left.confidence, right.confidence),
+            metadata=MarkerLedger._merge_metadata(left.metadata, right.metadata),
+        )
+
+    @staticmethod
+    def _merge_evidence(
+        left: Sequence[EvidenceRef],
+        right: Sequence[EvidenceRef],
+    ) -> tuple[EvidenceRef, ...]:
+        seen: set[tuple[object, ...]] = set()
+        merged: list[EvidenceRef] = []
+        for evidence in (*left, *right):
+            key = (
+                evidence.id,
+                evidence.claim_id,
+                evidence.source,
+                evidence.quote,
+                evidence.uri,
+                json.dumps(evidence.metadata, sort_keys=True),
+            )
             if key in seen:
                 continue
             seen.add(key)
-            deduped.append(draft)
-        return deduped
+            merged.append(evidence)
+        return tuple(merged)
+
+    @staticmethod
+    def _ordered_union(left: Sequence[str], right: Sequence[str]) -> tuple[str, ...]:
+        seen: set[str] = set()
+        values: list[str] = []
+        for value in (*left, *right):
+            if value in seen:
+                continue
+            seen.add(value)
+            values.append(value)
+        return tuple(values)
+
+    @staticmethod
+    def _max_optional(left: float | None, right: float | None) -> float | None:
+        if left is None:
+            return right
+        if right is None:
+            return left
+        return max(left, right)
+
+    @staticmethod
+    def _min_optional(left: float | None, right: float | None) -> float | None:
+        if left is None:
+            return right
+        if right is None:
+            return left
+        return min(left, right)
+
+    @staticmethod
+    def _merge_metadata(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+        merged: dict[str, Any] = {}
+        detectors: list[str] = []
+        for metadata in (left, right):
+            MarkerLedger._collect_detectors(metadata, detectors)
+            for key, value in metadata.items():
+                if key in {"detector", "detectors"}:
+                    continue
+                if key not in merged:
+                    merged[key] = value
+                elif merged[key] != value:
+                    merged[key] = MarkerLedger._merge_metadata_value(merged[key], value)
+        if detectors:
+            merged["detector"] = detectors[0]
+            merged["detectors"] = detectors
+        return merged
+
+    @staticmethod
+    def _collect_detectors(metadata: dict[str, Any], detectors: list[str]) -> None:
+        detector = metadata.get("detector")
+        if isinstance(detector, str) and detector not in detectors:
+            detectors.append(detector)
+        detector_list = metadata.get("detectors")
+        if isinstance(detector_list, Sequence) and not isinstance(detector_list, str | bytes):
+            for item in detector_list:
+                if isinstance(item, str) and item not in detectors:
+                    detectors.append(item)
+
+    @staticmethod
+    def _merge_metadata_value(left: Any, right: Any) -> list[Any]:
+        values = left if isinstance(left, list) else [left]
+        if right not in values:
+            return [*values, right]
+        return values

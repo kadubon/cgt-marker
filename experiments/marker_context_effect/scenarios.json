@@ -2,11 +2,12 @@
   {
     "id": "deadline_date_conflict",
     "title": "Deadline date conflict",
+    "scenario_type": "conflicting_date",
     "report": "The project deadline is currently listed as 2026-06-01.",
     "claims": [
       {
         "subject": "project.deadline",
-        "predicate": "equals",
+        "predicate": "date",
         "value": "2026-06-01",
         "source": "email",
         "metadata": {
@@ -16,7 +17,7 @@
       },
       {
         "subject": "project.deadline",
-        "predicate": "equals",
+        "predicate": "date",
         "value": "2026-06-03",
         "source": "calendar",
         "metadata": {
@@ -27,6 +28,7 @@
     ],
     "expected": {
       "has_conflict": true,
+      "requires_clarification": false,
       "values": ["2026-06-01", "2026-06-03"],
       "sources": ["email", "calendar"]
     }
@@ -34,6 +36,7 @@
   {
     "id": "release_status_conflict",
     "title": "Release status conflict",
+    "scenario_type": "conflicting_status",
     "report": "The release status is summarized as approved.",
     "claims": [
       {
@@ -51,6 +54,7 @@
     ],
     "expected": {
       "has_conflict": true,
+      "requires_clarification": false,
       "values": ["approved", "rejected"],
       "sources": ["review-system", "qa-system"]
     }
@@ -58,6 +62,7 @@
   {
     "id": "budget_interval_conflict",
     "title": "Budget interval conflict",
+    "scenario_type": "numeric_interval",
     "report": "The budget summary says the budget is at most 100.",
     "claims": [
       {
@@ -75,37 +80,125 @@
     ],
     "expected": {
       "has_conflict": true,
+      "requires_clarification": false,
       "values": ["100", "200"],
       "sources": ["finance-a", "finance-b"]
     }
   },
   {
-    "id": "meeting_date_conflict",
-    "title": "Meeting date conflict",
-    "report": "The meeting date is shown as 2026-07-10.",
+    "id": "source_claim_conflict",
+    "title": "Source claim conflict",
+    "scenario_type": "source_conflict",
+    "report": "The vendor summary says the shipment address is Dock A.",
     "claims": [
       {
-        "subject": "meeting.date",
-        "predicate": "date",
-        "value": "2026-07-10",
-        "source": "chat"
+        "subject": "shipment.address",
+        "predicate": "equals",
+        "value": "Dock A",
+        "source": "vendor-portal"
       },
       {
-        "subject": "meeting.date",
-        "predicate": "date",
-        "value": "2026-07-11",
-        "source": "calendar"
+        "subject": "shipment.address",
+        "predicate": "equals",
+        "value": "Dock B",
+        "source": "warehouse-system"
       }
     ],
     "expected": {
       "has_conflict": true,
-      "values": ["2026-07-10", "2026-07-11"],
-      "sources": ["chat", "calendar"]
+      "requires_clarification": false,
+      "values": ["Dock A", "Dock B"],
+      "sources": ["vendor-portal", "warehouse-system"]
+    }
+  },
+  {
+    "id": "stale_newer_claim_conflict",
+    "title": "Stale versus newer claim",
+    "scenario_type": "stale_vs_newer",
+    "report": "The customer tier summary says the account is on the basic plan.",
+    "claims": [
+      {
+        "subject": "account.tier",
+        "predicate": "equals",
+        "value": "basic",
+        "source": "cached-crm",
+        "metadata": {
+          "observed_at": "2026-04-01T00:00:00+00:00"
+        }
+      },
+      {
+        "subject": "account.tier",
+        "predicate": "equals",
+        "value": "enterprise",
+        "source": "billing-system",
+        "metadata": {
+          "observed_at": "2026-05-10T00:00:00+00:00"
+        }
+      }
+    ],
+    "expected": {
+      "has_conflict": true,
+      "requires_clarification": false,
+      "values": ["basic", "enterprise"],
+      "sources": ["cached-crm", "billing-system"]
+    }
+  },
+  {
+    "id": "policy_conflict",
+    "title": "Policy conflict",
+    "scenario_type": "policy_conflict",
+    "report": "The deployment note says production deployment is allowed.",
+    "claims": [
+      {
+        "subject": "deployment.production",
+        "predicate": "equals",
+        "value": "allowed",
+        "source": "release-policy"
+      },
+      {
+        "subject": "deployment.production",
+        "predicate": "equals",
+        "value": "blocked",
+        "source": "security-policy"
+      }
+    ],
+    "expected": {
+      "has_conflict": true,
+      "requires_clarification": false,
+      "values": ["allowed", "blocked"],
+      "sources": ["release-policy", "security-policy"]
+    }
+  },
+  {
+    "id": "ambiguous_owner_conflict",
+    "title": "Ambiguous conflict needing clarification",
+    "scenario_type": "ambiguous_conflict",
+    "report": "The task owner summary says ownership is assigned.",
+    "claims": [
+      {
+        "subject": "task.owner",
+        "predicate": "equals",
+        "value": "team-alpha",
+        "source": "planning-doc"
+      },
+      {
+        "subject": "task.owner",
+        "predicate": "equals",
+        "value": "team-beta",
+        "source": "handoff-note"
+      }
+    ],
+    "expected": {
+      "has_conflict": true,
+      "requires_clarification": true,
+      "values": ["team-alpha", "team-beta"],
+      "sources": ["planning-doc", "handoff-note"]
     }
   },
   {
     "id": "non_conflict_control",
     "title": "Non-conflict control",
+    "scenario_type": "control",
     "report": "The meeting room is Room A and the meeting status is active.",
     "claims": [
       {
@@ -123,6 +216,7 @@
     ],
     "expected": {
       "has_conflict": false,
+      "requires_clarification": false,
       "values": [],
       "sources": ["calendar"]
     }

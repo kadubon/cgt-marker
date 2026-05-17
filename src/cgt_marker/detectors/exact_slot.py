@@ -18,7 +18,7 @@ class ExactSlotConflictDetector:
     """Detect different values for the same subject and compatible predicate slot."""
 
     predicates: frozenset[str] = field(
-        default_factory=lambda: frozenset({"equals", "is", "status", "date", "value"})
+        default_factory=lambda: frozenset({"equals", "is", "status", "value"})
     )
     name: str = "exact_slot"
 

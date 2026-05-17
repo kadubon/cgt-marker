@@ -13,7 +13,9 @@ from cgt_marker.core.marker import Marker
 class JsonlStore:
     """Append/replay JSONL store for reproducible claim and marker logs.
 
-    This store is intentionally simple and is not a concurrent database.
+    Claims and markers are written as append-only records. Marker updates append a
+    new marker record with the same id; replay keeps the latest marker by id. This
+    store is intentionally simple and is not a concurrent or transactional database.
     """
 
     path: str | Path

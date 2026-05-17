@@ -17,6 +17,10 @@ METRICS = (
     "recommends_review",
     "false_conflict_on_control",
     "marker_success",
+    "avoids_silent_overwrite",
+    "asks_for_clarification_when_needed",
+    "preserves_unresolved_status",
+    "primary_success",
 )
 
 
@@ -64,10 +68,7 @@ def summarize_records(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "metrics": list(METRICS),
         "condition_summary": condition_summary,
         "scenario_condition_summary": scenario_condition_summary,
-        "primary_outcome": (
-            "marker_success = conflict scenario AND asserts_visible_conflict "
-            "AND mentions_both_values AND mentions_sources"
-        ),
+        "primary_outcome": "primary_success; see scoring version for deterministic rules",
         "limitations": [
             "This is a lightweight proxy evaluation, not a benchmark.",
             (
@@ -112,19 +113,22 @@ def write_markdown(summary: Mapping[str, Any], path: Path) -> None:
         "",
         "## Condition-Level Means",
         "",
-        "| condition | marker_success | asserts_visible_conflict | mentions_both_values | "
-        "mentions_sources | recommends_review | false_conflict_on_control |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| condition | primary_success | marker_success | asserts_visible_conflict | "
+        "mentions_both_values | mentions_sources | avoids_silent_overwrite | "
+        "asks_for_clarification_when_needed | false_conflict_on_control |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
 
     condition_summary = summary["condition_summary"]
     for condition, scores in sorted(condition_summary.items()):
         lines.append(
-            f"| {condition} | {_fmt(scores.get('marker_success'))} | "
+            f"| {condition} | {_fmt(scores.get('primary_success'))} | "
+            f"{_fmt(scores.get('marker_success'))} | "
             f"{_fmt(scores.get('asserts_visible_conflict'))} | "
             f"{_fmt(scores.get('mentions_both_values'))} | "
             f"{_fmt(scores.get('mentions_sources'))} | "
-            f"{_fmt(scores.get('recommends_review'))} | "
+            f"{_fmt(scores.get('avoids_silent_overwrite'))} | "
+            f"{_fmt(scores.get('asks_for_clarification_when_needed'))} | "
             f"{_fmt(scores.get('false_conflict_on_control'))} |"
         )
 
@@ -133,15 +137,16 @@ def write_markdown(summary: Mapping[str, Any], path: Path) -> None:
             "",
             "## Scenario-Level Compact Table",
             "",
-            "| scenario | condition | n | marker_success | asserts_visible_conflict | "
-            "mentions_both_values | mentions_sources |",
-            "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+            "| scenario | condition | n | primary_success | marker_success | "
+            "asserts_visible_conflict | mentions_both_values | mentions_sources |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
 
     for row in summary["scenario_condition_summary"]:
         lines.append(
             f"| {row['scenario_id']} | {row['condition']} | {row['n']} | "
+            f"{_fmt(row.get('primary_success'))} | "
             f"{_fmt(row.get('marker_success'))} | "
             f"{_fmt(row.get('asserts_visible_conflict'))} | "
             f"{_fmt(row.get('mentions_both_values'))} | "

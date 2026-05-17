@@ -20,6 +20,9 @@ from cgt_marker.core import (
     PolicyResult,
     SystemClock,
     UUIDGenerator,
+    ValidationIssue,
+    is_json_value,
+    validate_claim,
 )
 from cgt_marker.detectors import (
     ExactSlotConflictDetector,
@@ -60,4 +63,7 @@ __all__ = [
     "SystemClock",
     "TemporalConflictDetector",
     "UUIDGenerator",
+    "ValidationIssue",
+    "is_json_value",
+    "validate_claim",
 ]

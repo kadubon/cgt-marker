@@ -27,6 +27,11 @@ The ledger stores claims before returning a successful policy result. For reserv
 policy modes that are not implemented, conflict finalization raises before the new
 claim is saved. This avoids silent fallback to `MARK_ONLY`.
 
+If multiple detectors produce drafts for the same marker kind, subject, predicate,
+and claim-id set, the ledger merges those drafts before policy finalization. This
+keeps one marker while preserving dimensions, evidence, severity, confidence, and
+detector metadata.
+
 ## Loose Coupling
 
 Detectors do not know about stores. Stores do not know about detector rules.
